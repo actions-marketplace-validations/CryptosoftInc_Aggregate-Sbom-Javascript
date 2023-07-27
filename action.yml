@@ -60,14 +60,11 @@ runs:
           encoded_sbom=$(jq -c . aggregated_sbom.json | base64 | tr -d '\n')
           payloadfile=$(mktemp)
           
-          PROJECT_NAME= "${{ inputs.project-name }}"
-          PROJECT_VERSION= "${{ inputs.project-version }}"
-          
             if [[ -z "$uuid" ]]; then 
               cat << EOF > "$payloadfile"
           {
-            "projectName": "${PROJECT_NAME}",
-            "projectVersion": "${PROJECT_VERSION}",
+            "projectName": "${{ inputs.project-name }}",
+            "projectVersion": "${{ inputs.project-version }}",
             "autoCreate":true,
             "bom": "$encoded_sbom"
           }
