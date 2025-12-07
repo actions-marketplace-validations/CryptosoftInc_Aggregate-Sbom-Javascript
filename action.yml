@@ -15,23 +15,15 @@ inputs:
     required: true
 runs:
   using: "composite"
-steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v2 
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Generate SBOM
-        run: |
-          export FETCH_LICENSE=true
-          npm install -g @cyclonedx/cdxgen@8.6.0 && cdxgen -r -o bom.json| jq '.' 
-          
-      - name: Get SBOM using Project UUID
-        run: |  
+  steps:
+    - uses: actions/checkout@v2 
+    - run: npm install
+      shell: bash
+    - run: |
+             export FETCH_LICENSE=true
+             npm install -g @cyclonedx/cdxgen@8.6.0 && cdxgen -r -o bom.json
+      shell: bash
+    - run: |  
           API_ENDPOINT="${{ inputs.dt-url }}/api/v1/project/lookup"
           API_KEY="${{ inputs.api-key }}"
           PROJECT_NAME="${{ inputs.project-name }}"
@@ -43,14 +35,13 @@ steps:
           uuid=$(echo "$response" | jq -r '.uuid')
           echo "UUID: $uuid" 
           # API request to retrieve the existing SBOM
-          curl -k -X GET -H "X-Api-Key: $API_KEY" "{{inputs.dt-url}}/api/v1/bom/cyclonedx/project/${uuid}?format=json&variant=withVulnerabilities&download=true" > existing_sbom.json| jq '.'
+          curl -k -X GET -H "X-Api-Key: $API_KEY" "${{inputs.dt-url}}/api/v1/bom/cyclonedx/project/${uuid}?format=json&variant=withVulnerabilities&download=true" > existing_sbom.json| jq '.'
           else
               uuid=""
                echo '{}' > existing_sbom.json 
           fi 
-          
-      - name: Combine SBOMs
-        run: |
+      shell: bash    
+    - run: |
             jq -s 'def deepmerge(a;b):
              reduce b[] as $item (a;
                 reduce ($item | keys_unsorted[]) as $key (.;
@@ -63,21 +54,17 @@ steps:
                   end)
                 );
             deepmerge({}; .)' bom.json existing_sbom.json > aggregated_sbom.json
-                  
-      - name: Upload aggregated SBOM to Dependency Track
-        run: | 
+      shell: bash            
+    - run: | 
           # Read the combined JSON content from the file
           encoded_sbom=$(jq -c . aggregated_sbom.json | base64 | tr -d '\n')
           payloadfile=$(mktemp)
           
-          PROJECT_NAME= "${{ inputs.project-name }}"
-          PROJECT_VERSION= "${{ inputs.project-version }}"
-          
             if [[ -z "$uuid" ]]; then 
               cat << EOF > "$payloadfile"
           {
-            "projectName": "${PROJECT_NAME}",
-            "projectVersion": "${PROJECT_VERSION}",
+            "projectName": "${{ inputs.project-name }}",
+            "projectVersion": "${{ inputs.project-version }}",
             "autoCreate":true,
             "bom": "$encoded_sbom"
           }
@@ -97,8 +84,9 @@ steps:
             -H "Content-Type: application/json" \
             -H "X-Api-Key: ${{ inputs.api-key }}" \
             -d @"$payloadfile"
-
-      - name: Cleanup
-        run: |
+            
+      shell: bash
+    - run: |
           rm "bom.json" "existing_sbom.json" "aggregated_sbom.json"
+      shell: bash    
 
